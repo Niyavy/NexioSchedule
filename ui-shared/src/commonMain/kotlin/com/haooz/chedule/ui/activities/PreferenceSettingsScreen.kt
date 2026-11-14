@@ -42,13 +42,16 @@ import com.haooz.chedule.i18n.PreferenceStr
 import com.haooz.chedule.i18n.WeatherStr
 import com.haooz.chedule.ui.basic.OverlayDropdownMenu
 import com.haooz.chedule.ui.components.CardExpand
+import com.haooz.chedule.ui.components.pageTopExtra
 import com.haooz.chedule.ui.components.text.material.Text as Text
 import com.haooz.chedule.ui.theme.KEY_MONET_COLOR
 import com.haooz.chedule.ui.theme.LocalSystemDarkTheme
 import com.haooz.chedule.ui.theme.isMonetColorAvailable
 import com.haooz.chedule.ui.utils.AppMaterialSettings
 import com.haooz.chedule.ui.utils.FeatureLog
+import com.haooz.chedule.ui.utils.KEY_TODAY_INFO_CARDS
 import com.haooz.chedule.ui.utils.PredictiveBackSettings
+import com.haooz.chedule.ui.utils.rememberWeatherVisible
 import com.haooz.chedule.uishared.resources.Res
 import com.haooz.chedule.uishared.resources.theme_preview_light
 import com.haooz.chedule.uishared.resources.theme_preview_night
@@ -82,6 +85,12 @@ fun PreferenceSettingsScreen(
     onInvalidateWeatherCache: () -> Unit = {},
     /** 隐藏最近任务卡片（Android 专有能力；宿主注入） */
     onSetTaskExcludedFromRecents: (Boolean) -> Unit = {},
+    /** 是否展示「预测性返回动画」（仅 Android 有该能力） */
+    showPredictiveBackAnimation: Boolean = true,
+    /** 是否展示「隐藏后台」（仅 Android 有该能力） */
+    showHideFromRecents: Boolean = true,
+    /** 是否展示「莫奈取色」（仅 Android 支持动态取色） */
+    showMonetColor: Boolean = true,
 ) {
 
     val eduPrefs = remember { AppStorage.store("edu_import_prefs") }
@@ -140,7 +149,7 @@ fun PreferenceSettingsScreen(
         mutableStateOf(
             appPrefs.getString(
                 AppMaterialSettings.KEY_APP_MATERIAL,
-                AppMaterialSettings.BALANCED
+                AppMaterialSettings.BEST
             )
         )
     }
@@ -195,7 +204,8 @@ fun PreferenceSettingsScreen(
                 contentPadding = PaddingValues(
                     start = tabletHorizontalPadding,
                     end = tabletHorizontalPadding,
-                    top = paddingValues.calculateTopPadding() + CollapsibleTopAppBarDefaults.CollapsedHeight,
+                    top = paddingValues.calculateTopPadding() + CollapsibleTopAppBarDefaults.CollapsedHeight +
+                        pageTopExtra(isTablet, hasSmallTitle = false),
                     bottom = 60.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -250,20 +260,22 @@ fun PreferenceSettingsScreen(
                                     }
                                 }
                             )
-                            SwitchPreference(
-                                title = PreferenceStr.monetColor(),
-                                summary = if (isMonetColorAvailable()) {
-                                    PreferenceStr.monetColorSummary()
-                                } else {
-                                    PreferenceStr.monetColorUnavailable()
-                                },
-                                checked = monetEnabled && isMonetColorAvailable(),
-                                enabled = isMonetColorAvailable(),
-                                onCheckedChange = {
-                                    monetEnabled = it
-                                    themePrefs.edit { putBoolean(KEY_MONET_COLOR, it) }
-                                }
-                            )
+                            if (showMonetColor) {
+                                SwitchPreference(
+                                    title = PreferenceStr.monetColor(),
+                                    summary = if (isMonetColorAvailable()) {
+                                        PreferenceStr.monetColorSummary()
+                                    } else {
+                                        PreferenceStr.monetColorUnavailable()
+                                    },
+                                    checked = monetEnabled && isMonetColorAvailable(),
+                                    enabled = isMonetColorAvailable(),
+                                    onCheckedChange = {
+                                        monetEnabled = it
+                                        themePrefs.edit { putBoolean(KEY_MONET_COLOR, it) }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -390,19 +402,30 @@ fun PreferenceSettingsScreen(
                                     )
                                 )
                             }
-                            SwitchPreference(
-                                title = PreferenceStr.predictiveBack(),
-                                summary = PreferenceStr.predictiveBackSummary(),
-                                checked = predictiveBackEnabled,
-                                onCheckedChange = {
-                                    predictiveBackEnabled = it
-                                    PredictiveBackSettings.enabled = it
-                                    appPrefs.edit {
-                                        putBoolean(
-                                            PredictiveBackSettings.KEY_PREDICTIVE_BACK_ANIMATION,
-                                            it
-                                        )
+                            if (showPredictiveBackAnimation) {
+                                SwitchPreference(
+                                    title = PreferenceStr.predictiveBack(),
+                                    summary = PreferenceStr.predictiveBackSummary(),
+                                    checked = predictiveBackEnabled,
+                                    onCheckedChange = {
+                                        predictiveBackEnabled = it
+                                        PredictiveBackSettings.enabled = it
+                                        appPrefs.edit {
+                                            putBoolean(
+                                                PredictiveBackSettings.KEY_PREDICTIVE_BACK_ANIMATION,
+                                                it
+                                            )
+                                        }
                                     }
+                                )
+                            }
+                            val weatherVisible = rememberWeatherVisible()
+                            SwitchPreference(
+                                title = PreferenceStr.showWeather(),
+                                summary = PreferenceStr.showWeatherSummary(),
+                                checked = weatherVisible,
+                                onCheckedChange = {
+                                    appPrefs.edit { putBoolean(KEY_TODAY_INFO_CARDS, it) }
                                 }
                             )
                             SwitchPreference(
@@ -419,16 +442,18 @@ fun PreferenceSettingsScreen(
                                     }
                                 }
                             )
-                            SwitchPreference(
-                                title = PreferenceStr.hideFromRecents(),
-                                summary = PreferenceStr.hideFromRecentsSummary(),
-                                checked = hideBackground,
-                                onCheckedChange = {
-                                    hideBackground = it
-                                    appPrefs.edit { putBoolean("hide_background", it) }
-                                    onSetTaskExcludedFromRecents(it)
-                                }
-                            )
+                            if (showHideFromRecents) {
+                                SwitchPreference(
+                                    title = PreferenceStr.hideFromRecents(),
+                                    summary = PreferenceStr.hideFromRecentsSummary(),
+                                    checked = hideBackground,
+                                    onCheckedChange = {
+                                        hideBackground = it
+                                        appPrefs.edit { putBoolean("hide_background", it) }
+                                        onSetTaskExcludedFromRecents(it)
+                                    }
+                                )
+                            }
                         }
                     }
                 }

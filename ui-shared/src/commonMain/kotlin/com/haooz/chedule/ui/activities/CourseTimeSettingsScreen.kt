@@ -50,6 +50,7 @@ import com.haooz.chedule.i18n.ImportStr
 import com.haooz.chedule.i18n.TimeCfgStr
 import com.haooz.chedule.i18n.orDefaultName
 import com.haooz.chedule.ui.basic.OverlayDropdownMenu
+import com.haooz.chedule.ui.components.pageTopExtra
 import com.haooz.chedule.ui.components.text.material.Text as Text
 import com.haooz.chedule.ui.utils.TransitionLayerSnapshot
 import com.haooz.chedule.ui.utils.isAppDarkTheme
@@ -177,7 +178,7 @@ fun CourseTimeSettingsScreen(
                     contentPadding = PaddingValues(
                         start = tabletHorizontalPadding,
                         top = paddingValues.calculateTopPadding() + CollapsibleTopAppBarDefaults.CollapsedHeight +
-                            (if (isTablet) 24.dp else 12.dp),
+                            pageTopExtra(isTablet, hasSmallTitle = true),
                         end = tabletHorizontalPadding,
                         bottom = 60.dp
                     ),
@@ -186,12 +187,8 @@ fun CourseTimeSettingsScreen(
                     // 作息方案：点进去才进二级。按项目惯例收在一张 Card 里，行间自动分隔
                     item(key = "routines") {
                         SmallTitle(text = TimeCfgStr.routinesTitle())
-                        // morph 期间整张作息卡都不画，routineLayer 留住上一帧给二级页重放。
-                        val hideRoutinesCard = morphActive == true
                         Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .drawWithContent { if (!hideRoutinesCard) drawContent() },
+                            modifier = Modifier.fillMaxWidth(),
                             insideMargin = PaddingValues(0.dp)
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {

@@ -316,9 +316,7 @@ private fun CourseDetailCard(
                 }
                 .drawWithContent {
                     // The outer visibility/reveal transform is deliberately not recorded.
-                    if (!isHidden) {
-                        cardLayer.record { this@drawWithContent.drawContent() }
-                    }
+                    cardLayer.record { this@drawWithContent.drawContent() }
                     drawLayer(cardLayer)
                 },
             insideMargin = PaddingValues(0.dp),

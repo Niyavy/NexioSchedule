@@ -6,7 +6,6 @@ import com.haooz.softglass.glass.BrightTone
 import com.haooz.softglass.glass.CustomizeFill
 import com.haooz.softglass.glass.SOFT_GLASS_LIVE_SHADER
 import com.haooz.softglass.glass.applySoftGlass
-import com.haooz.softglass.GlassEnvironment
 import com.haooz.chedule.ui.glass.ScheduleSoftGlassStyle
 import com.haooz.softglass.backdrop.GlassBackdrop
 import com.haooz.softglass.backdrop.GlassEffectScope
@@ -15,7 +14,6 @@ import com.haooz.softglass.backdrop.effects.blur
 import com.haooz.softglass.backdrop.effects.runtimeShaderEffect
 import com.haooz.softglass.backdrop.backdrops.rememberLayerBackdrop
 import com.haooz.softglass.backdrop.backdrops.layerBackdrop
-import top.yukonga.miuix.kmp.material.LocalSoftGlassLayer
 import top.yukonga.miuix.kmp.material.LocalGlassBlurDp
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -439,7 +437,9 @@ fun WidgetCustomizeOverlay(
         ) {
             WidgetPreviewContent(
                 page = request.page,
-                fillBounds = true,
+                // 外层 Box 已被量成页面里那块小部件的尺寸（所有设备同一个 dp 宽度），
+                // 内容直接铺满即可 —— 页面与浮层逐像素重合，2×2 页也不会被拉成横条
+                modifier = Modifier.fillMaxSize(),
                 appearance = appearance,
                 wallpaper = wallpaper?.let { WidgetWallpaper(bitmap = it, crop = wallpaperCrop) },
                 isDark = remember(wallpaper, themeMode) {
@@ -583,7 +583,7 @@ private fun WidgetChromeCapsule(
     val capsuleShape = remember { ContinuousCapsule() }
     val glassStyle = AppMaterialSettings.chromeGlassStyle(
         base = ScheduleSoftGlassStyle,
-        isDark = GlassEnvironment.isDark,
+        isDark = isAppDarkTheme(),
         fill = CustomizeFill(containerColor),
         tone = BrightTone,
     )

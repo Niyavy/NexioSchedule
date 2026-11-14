@@ -5,7 +5,6 @@ import com.haooz.chedule.data.backup.decodeStringList
 import com.haooz.chedule.data.backup.encodeStringList
 import com.haooz.chedule.data.backup.encodeTimeConfig
 import com.haooz.chedule.data.backup.parseTimeConfigSnapshotOrNull
-import com.haooz.chedule.data.backup.weekNotes
 import com.haooz.chedule.data.holiday.HolidayEntry
 import com.haooz.chedule.data.holiday.HolidayManager
 import com.haooz.chedule.data.holiday.TeachingWeekPosition
@@ -458,12 +457,16 @@ class CourseRepository private constructor() : PeriodTimeSource {
         internal const val DEFAULT_FOLDER_ID = "folder_default"
         internal const val KEY_PRE_CLASS_REMINDER = "pre_class_reminder"
         internal const val KEY_PRE_CLASS_REMINDER_MINUTES = "pre_class_reminder_minutes"
+        /** 上课提醒的节次范围：起始节（1 起） */
+        internal const val KEY_PRE_CLASS_REMINDER_START_SECTION = "pre_class_reminder_start_section"
+        /** 上课提醒的节次范围：结束节；0 = 不限（到最后） */
+        internal const val KEY_PRE_CLASS_REMINDER_END_SECTION = "pre_class_reminder_end_section"
         internal const val KEY_NEXT_DAY_REMINDER = "next_day_reminder"
         internal const val KEY_NEXT_DAY_REMINDER_HOUR = "next_day_reminder_hour"
         internal const val KEY_NEXT_DAY_REMINDER_MINUTE = "next_day_reminder_minute"
         internal const val KEY_ISLAND_NOTIFICATION = "island_notification"
         internal const val KEY_CLASS_DND = "class_dnd_enabled"
-        /** 上课时启用的系统勿扰档位：0=勿扰模式 (DND, NONE)，1=静音模式 (SILENT, PRIORITY，闹钟仍响) */
+        /** 0=勿扰 (FILTER_NONE)，1=静音 (RINGER_SILENT)，2=优先 (FILTER_PRIORITY) */
         internal const val KEY_CLASS_DND_MODE = "class_dnd_mode"
         internal const val KEY_SHIFT_MODE = "shift_mode_enabled"
         internal const val KEY_SHIFT_SELECTED_SCHEDULES = "shift_selected_schedules"
@@ -1697,6 +1700,24 @@ class CourseRepository private constructor() : PeriodTimeSource {
         prefs.edit {putInt(KEY_PRE_CLASS_REMINDER_MINUTES, minutes) }
     }
 
+    /** 上课提醒起始节（默认 1，即从第一节开始提醒） */
+    fun getPreClassReminderStartSection(): Int {
+        return safeGetInt(KEY_PRE_CLASS_REMINDER_START_SECTION, 1).coerceAtLeast(1)
+    }
+
+    fun setPreClassReminderStartSection(section: Int) {
+        prefs.edit { putInt(KEY_PRE_CLASS_REMINDER_START_SECTION, section.coerceAtLeast(1)) }
+    }
+
+    /** 上课提醒结束节；0 = 不限（一直到最后节） */
+    fun getPreClassReminderEndSection(): Int {
+        return safeGetInt(KEY_PRE_CLASS_REMINDER_END_SECTION, 0).coerceAtLeast(0)
+    }
+
+    fun setPreClassReminderEndSection(section: Int) {
+        prefs.edit { putInt(KEY_PRE_CLASS_REMINDER_END_SECTION, section.coerceAtLeast(0)) }
+    }
+
     fun getNextDayReminder(): Boolean {
         return prefs.getBoolean(KEY_NEXT_DAY_REMINDER, false)
     }
@@ -1748,7 +1769,7 @@ class CourseRepository private constructor() : PeriodTimeSource {
         prefs.edit { putBoolean(KEY_CLASS_DND, enabled) }
     }
 
-    /** 0=勿扰 1=静音(闹钟仍响) 2=优先；默认 1 不影响查看通知 */
+    /** 0=勿扰 1=静音 2=优先；默认 1，通知仍可查看 */
     fun getClassDndMode(): Int {
         return safeGetInt(KEY_CLASS_DND_MODE, 1)
     }
@@ -2597,10 +2618,12 @@ class CourseRepository private constructor() : PeriodTimeSource {
                     sectionTimes = sectionTimes
                 )
             val routineId = base.effectiveRoutineId()
-            saveTimeConfig(
+            val next =
                 if (routineId == null) updated
                 else base.withRoutineTimesApplied(routineId, updated)
-            )
+            // 切换课表时目标配置通常就是当前配置：内容没变就不整份写库、不发变更
+            if (next == base) return
+            saveTimeConfig(next)
         } finally {
             batchingSettings = false
         }

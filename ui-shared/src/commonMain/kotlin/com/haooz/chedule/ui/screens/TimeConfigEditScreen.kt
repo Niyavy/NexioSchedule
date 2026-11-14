@@ -37,6 +37,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.ColorFilter
@@ -105,6 +106,7 @@ import top.yukonga.miuix.kmp.layout.CollapsibleTopAppBar
 import top.yukonga.miuix.kmp.layout.ProgressiveBlurTopBar
 import top.yukonga.miuix.kmp.layout.isTabletWidth
 import top.yukonga.miuix.kmp.layout.rememberSharedScrollBehavior
+import top.yukonga.miuix.kmp.layout.rememberTopBarMaterialState
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import com.haooz.softglass.shape.continuousSurface
@@ -215,7 +217,9 @@ fun TimeConfigEditScreen(
     isFabCreation: Boolean = false,
     /** 删除当前作息并回到一级列表（宿主负责落库与刷新列表） */
     onDeleteRoutine: (Long) -> Unit = {},
-    liquidGlassBackdrop: LayerBackdrop? = null
+    liquidGlassBackdrop: LayerBackdrop? = null,
+    /** false = 先停在起点卡态，等宿主持源卡藏掉、整页快照上屏后再放行展开 */
+    morphStarted: Boolean = true,
 ) {
     val hapticFeedback = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
@@ -320,6 +324,7 @@ fun TimeConfigEditScreen(
         onBack = onBack,
         // 对话框开着时返回只回弹页面，不关页
         interceptBack = { showTimeDialog || showQuickItemDialog },
+        autoStart = morphStarted,
     )
 
     fun triggerExitAndBack(onSavePending: (() -> Unit)? = null) {
@@ -400,10 +405,10 @@ fun TimeConfigEditScreen(
             allTimes.add(TimeRange(range.first, range.last, TimeEditStr.eveningSectionN(section), true))
         }
         // 特殊课程块也上时间轴：早读/大课间与节次同处一条时间线，重叠会让横带骑到课程卡上。
-        for (block in specialBlocks) {
-            val s = parseRange("${block.startTime}-${block.endTime}") ?: continue
+        for ((_, name, startTime, endTime) in specialBlocks) {
+            val s = parseRange("$startTime-$endTime") ?: continue
             if (s.last <= s.first) continue
-            val label = block.name.ifBlank { TimeEditStr.specialCourse() }
+            val label = name.ifBlank { TimeEditStr.specialCourse() }
             allTimes.add(TimeRange(s.first, s.last, label, false))
         }
 
@@ -519,21 +524,23 @@ fun TimeConfigEditScreen(
     val isTablet = isTabletWidth()
     val tabletHorizontalPadding = if (isTablet) 20.dp else 16.dp
 
-    val s = morph.state.value
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                if (isDark) ComposeColor(0xFF2C2C2C).copy(alpha = s.bgAlpha)
-                else ComposeColor.Black.copy(alpha = s.bgAlpha)
-            )
+            .drawBehind {
+                val alpha = morph.state.value.bgAlpha
+                drawRect(
+                    if (isDark) ComposeColor(0xFF2C2C2C).copy(alpha = alpha)
+                    else ComposeColor.Black.copy(alpha = alpha)
+                )
+            }
             .pointerInput(Unit) { }
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    val s = morph.state.value
                     clip = false
                     transformOrigin = TransformOrigin(s.anchorX, 0.5f)
                     scaleX = s.scale
@@ -547,14 +554,18 @@ fun TimeConfigEditScreen(
                     else MiuixTheme.colorScheme.background
                 )
         ) {
-            if (cardSnapshot != null && s.snapshotAlpha > 0f) {
+            if (cardSnapshot != null) {
                 TransitionLayerImage(
                     snapshot = cardSnapshot,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
-                        .clip(ContinuousRoundedRectangle((cardStartCornerRadius / s.scale).dp))
-                        .graphicsLayer { alpha = s.snapshotAlpha },
+                        .graphicsLayer {
+                            val s = morph.state.value
+                            shape = ContinuousRoundedRectangle((cardStartCornerRadius / s.scale).dp)
+                            clip = true
+                            alpha = s.snapshotAlpha
+                        },
                     contentScale = ContentScale.FillWidth
                 )
             }
@@ -562,10 +573,12 @@ fun TimeConfigEditScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = s.contentAlpha }
+                    .graphicsLayer { alpha = morph.state.value.contentAlpha }
             ) {
                 Scaffold(
                     topBar = {
+                        // 本页唯一材质状态：按钮玻璃走全站同一判据（本页遮罩常驻，不接 maskAlpha）
+                        val material = rememberTopBarMaterialState(scrollBehavior)
                         ProgressiveBlurTopBar(
                             backdrop = liquidGlassBackdrop!!,
                             // Native controls stay above the morph; preserve the existing inset contract.
@@ -579,6 +592,7 @@ fun TimeConfigEditScreen(
                                     WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
                                 ),
                                 scrollBehavior = scrollBehavior,
+                                materialState = material,
                                 contentPadding = {},
                                 startAction = if (usesNativeControls) null else { backdropAlpha, shadowAlpha ->
                                     LiquidTopBarButton(

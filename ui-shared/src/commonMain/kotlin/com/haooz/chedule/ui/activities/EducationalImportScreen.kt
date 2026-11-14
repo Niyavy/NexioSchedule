@@ -69,7 +69,6 @@ import com.haooz.chedule.ui.utils.LocalNativeDocumentChrome
 import com.haooz.chedule.ui.utils.NativeDocumentAction
 import com.haooz.chedule.ui.utils.NativeDocumentActionEffect
 import com.haooz.chedule.ui.utils.isAppDarkTheme
-import com.haooz.chedule.ui.utils.screenWidthDp
 import com.haooz.chedule.ui.web.EduImportSelection
 import com.haooz.chedule.viewmodel.CourseViewModel
 import com.haooz.chedule.viewmodel.ScheduleViewModel
@@ -105,6 +104,7 @@ import top.yukonga.miuix.kmp.layout.ProgressiveBlurTopBar
 import top.yukonga.miuix.kmp.layout.collapsibleTopInset
 import top.yukonga.miuix.kmp.layout.isTabletWidth
 import top.yukonga.miuix.kmp.layout.rememberSharedScrollBehavior
+import top.yukonga.miuix.kmp.layout.rememberTopBarMaterialState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -162,10 +162,7 @@ fun EducationalImportScreen(
     }
 
     val isTablet = isTabletWidth()
-    val tabletHorizontalPadding = if (isTablet) {
-        val widthDp = screenWidthDp()
-        ((widthDp - 600).coerceIn(0, 600) / 600f * 112 + 16).dp
-    } else 0.dp
+    val tabletHorizontalPadding = if (isTablet) 20.dp else 16.dp
     val hapticFeedback = LocalHapticFeedback.current
     val displayTabs = listOf(ImportStr.tabSchoolImport(), ImportStr.generalTools())
 
@@ -274,6 +271,8 @@ fun EducationalImportScreen(
                 }
             }
 
+            // 本页唯一材质状态：按钮玻璃走全站同一判据（本页遮罩常驻，不接 maskAlpha）
+            val material = rememberTopBarMaterialState(scrollBehavior)
             ProgressiveBlurTopBar(
                 backdrop = liquidGlassBackdrop,
                 height = blurHeight,
@@ -285,6 +284,7 @@ fun EducationalImportScreen(
                     showLargeTitle = true,
                     modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                     scrollBehavior = scrollBehavior,
+                    materialState = material,
                     contentPadding = {},
                     onAlphaChanged = { bd, sh ->
                         searchBackdropAlpha = bd
@@ -348,8 +348,8 @@ fun EducationalImportScreen(
                     modifier = Modifier.padding(
                         top = 8.dp,
                         bottom = 6.dp,
-                        start = 6.dp + tabletHorizontalPadding,
-                        end = 6.dp + tabletHorizontalPadding
+                        start = (tabletHorizontalPadding - 10.dp).coerceAtLeast(0.dp),
+                        end = (tabletHorizontalPadding - 10.dp).coerceAtLeast(0.dp)
                     ),
                     inputField = {
                         InputField(
@@ -377,7 +377,7 @@ fun EducationalImportScreen(
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth()
-                        .padding(horizontal = 20.dp + tabletHorizontalPadding, vertical = 4.dp),
+                        .padding(horizontal = tabletHorizontalPadding, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     displayTabs.forEachIndexed { index, tabName ->

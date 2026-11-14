@@ -682,7 +682,7 @@ internal fun AppRoute.nativeDocumentTitle(): String? = when (this) {
     AppRoute.AppreciateAuthor -> ChromeStr.donate()
     AppRoute.PreferenceSettings -> ChromeStr.appPreferences()
     AppRoute.UpdateSettings -> ChromeStr.updateSettingsTitle()
-    AppRoute.LocalBackup -> ChromeStr.localBackup()
+    AppRoute.UpdatePreferences -> ChromeStr.updatePreferencesTitle()
     AppRoute.AiImport -> ChromeStr.aiImport()
     AppRoute.WidgetIntro -> ChromeStr.widgetsTitle()
     AppRoute.CourseReminder -> ChromeStr.courseReminders()

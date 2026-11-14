@@ -1,7 +1,4 @@
-/**
- * 备份与迁移页面 - Screen。平台专有能力（文件选择/另存为、口令分享/抓取、手环推送、
- * 节假日变更后重排提醒）全部由宿主注入，见各参数注释。
- */
+/** 课表导入 / 导出页面；平台专有能力由宿主注入，见各参数注释。 */
 package com.haooz.chedule.ui.activities
 
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +29,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.haooz.chedule.data.backup.NoopScheduleFileController
 import com.haooz.chedule.data.backup.ScheduleFileController
-import com.haooz.chedule.data.backup.WebDavManager
 import com.haooz.chedule.data.backup.encodeBackupJson
 import com.haooz.chedule.data.backup.parseFullScheduleJson
 import com.haooz.chedule.data.backup.parseIcsFile
@@ -47,16 +43,17 @@ import com.haooz.chedule.data.model.TeachingWeekReorganization
 import com.haooz.chedule.data.platform.showToast
 import com.haooz.chedule.data.repo.CourseRepository
 import com.haooz.chedule.data.repo.DayScheduleResolver
-import com.haooz.chedule.data.util.formatDateTimeMinute
 import com.haooz.chedule.data.util.formatIcsTimestamp
-import com.haooz.chedule.data.util.localDateTimeAt
 import com.haooz.chedule.data.util.plusDays
-import com.haooz.chedule.i18n.AppLanguage
 import com.haooz.chedule.i18n.BackupStr
 import com.haooz.chedule.i18n.CommonStr
 import com.haooz.chedule.ui.basic.OverlayDropdownMenu
 import com.haooz.chedule.ui.components.CardExpand
+import com.haooz.chedule.ui.components.NoopWatchSyncController
 import com.haooz.chedule.ui.components.ScheduleImportConfirmDialog
+import com.haooz.chedule.ui.components.WatchSyncController
+import com.haooz.chedule.ui.components.WatchSyncSheet
+import com.haooz.chedule.ui.components.pageTopExtra
 import com.haooz.chedule.ui.components.text.miuix.Text as Text
 import com.haooz.chedule.ui.navigation.AppRoute
 import com.haooz.chedule.ui.navigation.LocalAppRouter
@@ -96,11 +93,10 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
-/** 课表导入 / 导出 / 备份 三种页面模式 */
+/** 课表导入 / 导出两种页面模式。 */
 enum class ScheduleDataManageMode {
     Import,
     Export,
-    Backup,
 }
 
 /** 课表导入 / 导出 / 备份页面；由 [mode] 决定展示内容，入口页共用。 */
@@ -131,8 +127,18 @@ fun BackupAndMigrationScreen(
     onShareSchedule: (scheduleName: String, onSharingChanged: (Boolean) -> Unit) -> Unit = { _, _ -> },
     /** 导出到手环（Android 专有；未连接/不支持时返回 null） */
     onExportToWearable: suspend (scheduleName: String) -> String? = { null },
+    /** 导出到手表（蓝牙）：扫描 + 分片推送，宿主注入；未注入的平台走占位实现 */
+    watchSyncController: WatchSyncController = NoopWatchSyncController,
     /** 同步到系统日历（Android 专有；未实现的平台保持默认值 → 点按只提示不支持） */
     onSyncToCalendar: suspend (scheduleName: String) -> CalendarSyncResult = { CalendarSyncResult.Unsupported },
+    /** 是否展示「口令分享导出」（需要出图 + 系统分享能力）。 */
+    showShareCodeExport: Boolean = true,
+    /** 是否展示「同步到日历」（需要系统日历写入能力）。 */
+    showCalendarSync: Boolean = true,
+    /** 是否展示「导出到手环」（Android 专有推送通道）。 */
+    showWearableExport: Boolean = true,
+    /** 是否展示「导出到安卓手表」（Android 专有蓝牙通道）。 */
+    showWatchExport: Boolean = true,
 ) {
     val hapticFeedback = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -144,15 +150,6 @@ fun BackupAndMigrationScreen(
 
     val isTablet = isTabletWidth()
     val tabletHorizontalPadding = if (isTablet) 20.dp else 16.dp
-
-    // 恢复成功后的提醒重排是平台副作用，走注入
-    val webDavManager = remember { WebDavManager { onHolidayDataChanged() } }
-    val lastSyncTimeMs = webDavManager.lastSyncTime
-    val lastSyncSummary = remember(lastSyncTimeMs, AppLanguage.resolved) {
-        // 格式只含数字与固定分隔符、不受 Locale 影响（:core 手写等价格式化）。
-        if (lastSyncTimeMs > 0L) BackupStr.lastOperationAtN(localDateTimeAt(lastSyncTimeMs).formatDateTimeMinute())
-        else BackupStr.noOperationYet()
-    }
 
     var showImportConfirmDialog by remember { mutableStateOf(false) }
     var pendingImportData by remember { mutableStateOf<Map<String, Any>?>(null) }
@@ -176,6 +173,8 @@ fun BackupAndMigrationScreen(
 
     var showShareExportConfirmDialog by remember { mutableStateOf(false) }
     var isSharingExport by remember { mutableStateOf(false) }
+    // 导出到手表：面板常驻挂载（靠 show 驱动），发送途中切走也不会中断传输
+    var showWatchSyncSheet by remember { mutableStateOf(false) }
 
     /** 选一个 JSON 备份/课表文件读入；控制器已按原文案处理取消与读取失败 */
     fun pickJsonFile() {
@@ -237,7 +236,7 @@ fun BackupAndMigrationScreen(
                 start = tabletHorizontalPadding,
                 end = tabletHorizontalPadding,
                 top = paddingValues.calculateTopPadding() + CollapsibleTopAppBarDefaults.CollapsedHeight +
-                    (if (isTablet) 12.dp else 0.dp) + topExtra,
+                    pageTopExtra(isTablet, hasSmallTitle = true) + topExtra,
                 bottom = 60.dp
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -482,102 +481,93 @@ fun BackupAndMigrationScreen(
                                     }
                                 }
                             )
-                            ArrowPreference(
-                                title = BackupStr.shareCodeExport(),
-                                summary = BackupStr.shareCodeExportSummary(),
-                                holdDownState = showShareExportConfirmDialog,
-                                onClick = {
-                                    if (selectedExportSchedule.isBlank()) {
-                                        showToast(BackupStr.selectScheduleToShareFirst())
-                                    } else if (!isSharingExport) {
-                                        showShareExportConfirmDialog = true
+                            if (showShareCodeExport) {
+                                ArrowPreference(
+                                    title = BackupStr.shareCodeExport(),
+                                    summary = BackupStr.shareCodeExportSummary(),
+                                    holdDownState = showShareExportConfirmDialog,
+                                    onClick = {
+                                        if (selectedExportSchedule.isBlank()) {
+                                            showToast(BackupStr.selectScheduleToShareFirst())
+                                        } else if (!isSharingExport) {
+                                            showShareExportConfirmDialog = true
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        insideMargin = PaddingValues(0.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            ArrowPreference(
-                                title = BackupStr.syncToCalendar(),
-                                summary = BackupStr.syncToCalendarSummary(),
-                                onClick = {
-                                    if (selectedExportSchedule.isBlank()) {
-                                        showToast(BackupStr.selectScheduleToShareFirst())
-                                    } else {
-                                        scope.launch {
-                                            val result = onSyncToCalendar(selectedExportSchedule)
-                                            val message = when (result) {
-                                                is CalendarSyncResult.Success ->
-                                                    BackupStr.calendarSyncSuccessN(result.count)
-                                                CalendarSyncResult.PermissionDenied ->
-                                                    BackupStr.calendarPermissionDenied()
-                                                CalendarSyncResult.NoWritableCalendar ->
-                                                    BackupStr.calendarNoWritable()
-                                                CalendarSyncResult.Failed ->
-                                                    BackupStr.calendarSyncFailed()
-                                                CalendarSyncResult.Unsupported ->
-                                                    BackupStr.platformNotSupportedN(BackupStr.syncToCalendar())
+                if (showCalendarSync || showWearableExport || showWatchExport) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            insideMargin = PaddingValues(0.dp)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                if (showCalendarSync) {
+                                    ArrowPreference(
+                                        title = BackupStr.syncToCalendar(),
+                                        summary = BackupStr.syncToCalendarSummary(),
+                                        onClick = {
+                                            if (selectedExportSchedule.isBlank()) {
+                                                showToast(BackupStr.selectScheduleToShareFirst())
+                                            } else {
+                                                scope.launch {
+                                                    val result = onSyncToCalendar(selectedExportSchedule)
+                                                    val message = when (result) {
+                                                        is CalendarSyncResult.Success ->
+                                                            BackupStr.calendarSyncSuccessN(result.count)
+                                                        CalendarSyncResult.PermissionDenied ->
+                                                            BackupStr.calendarPermissionDenied()
+                                                        CalendarSyncResult.NoWritableCalendar ->
+                                                            BackupStr.calendarNoWritable()
+                                                        CalendarSyncResult.Failed ->
+                                                            BackupStr.calendarSyncFailed()
+                                                        CalendarSyncResult.Unsupported ->
+                                                            BackupStr.platformNotSupportedN(BackupStr.syncToCalendar())
+                                                    }
+                                                    showToast(message, longDuration = true)
+                                                }
                                             }
-                                            showToast(message, longDuration = true)
                                         }
-                                    }
+                                    )
                                 }
-                            )
-                            ArrowPreference(
-                                title = BackupStr.exportToWearable(),
-                                summary = BackupStr.exportToWearableSummary(),
-                                onClick = {
-                                    scope.launch {
-                                        val path = onExportToWearable(selectedExportSchedule)
-                                        if (path != null) {
-                                            showToast(BackupStr.wearableExportSuccessN(path), longDuration = true)
-                                        } else {
-                                            showToast(BackupStr.wearableExportFailed())
+                                if (showWearableExport) {
+                                    ArrowPreference(
+                                        title = BackupStr.exportToWearable(),
+                                        summary = BackupStr.exportToWearableSummary(),
+                                        onClick = {
+                                            scope.launch {
+                                                val path = onExportToWearable(selectedExportSchedule)
+                                                if (path != null) {
+                                                    showToast(BackupStr.wearableExportSuccessN(path), longDuration = true)
+                                                } else {
+                                                    showToast(BackupStr.wearableExportFailed())
+                                                }
+                                            }
                                         }
-                                    }
+                                    )
                                 }
-                            )
+                                if (showWatchExport) {
+                                    ArrowPreference(
+                                        title = BackupStr.exportToWatch(),
+                                        summary = BackupStr.exportToWatchSummary(),
+                                        onClick = {
+                                            if (selectedExportSchedule.isBlank()) {
+                                                showToast(BackupStr.selectScheduleToShareFirst())
+                                            } else {
+                                                showWatchSyncSheet = true
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            if (mode == ScheduleDataManageMode.Backup) {
-                item {
-                    SmallTitle(
-                        text = BackupStr.backupSection(),
-                    )
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        insideMargin = PaddingValues(0.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            // LocalAppRouter.current 是 @Composable 调用，必须在组合层取
-                            val appRouter = LocalAppRouter.current
-                            ArrowPreference(
-                                title = BackupStr.localBackup(),
-                                summary = BackupStr.localBackupSummary(),
-                                onClick = {
-                                    appRouter.navigate(AppRoute.LocalBackup)
-                                }
-                            )
-                            ArrowPreference(
-                                title = BackupStr.webDavBackup(),
-                                summary = if (webDavManager.isConfigured()) lastSyncSummary else BackupStr.webDavBackupSummary(),
-                                onClick = {
-                                    appRouter.navigate(AppRoute.WebDavSettings)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -609,6 +599,14 @@ fun BackupAndMigrationScreen(
             showImportConfirmDialog = false
             pendingImportData = null
         }
+    )
+
+    // 导出到手表：蓝牙扫描 + 分片推送。常驻挂载，关闭只切 show，避免传输被组合销毁打断
+    WatchSyncSheet(
+        show = showWatchSyncSheet,
+        scheduleName = selectedExportSchedule,
+        controller = watchSyncController,
+        onDismiss = { showWatchSyncSheet = false },
     )
 
     // 始终挂载、靠 show 驱动：避免 if 卸载导致关闭无退出动画

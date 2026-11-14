@@ -21,6 +21,7 @@ import com.haooz.chedule.data.appearance.CardRefractionLevel
 import com.haooz.chedule.data.appearance.CardTextColor
 import com.haooz.chedule.ui.components.PageSwitchState
 import com.haooz.chedule.ui.screens.SettingsScreen
+import com.haooz.chedule.ui.screens.SettingsSearchState
 import com.haooz.chedule.viewmodel.CourseViewModel
 import com.haooz.chedule.viewmodel.ScheduleViewModel
 import com.haooz.chedule.viewmodel.SettingsViewModel
@@ -122,8 +123,12 @@ data class SettingsPaneArgs(
     val navBarStyle: String,
     val settingsScrollBehavior: SharedScrollBehavior?,
     val liquidGlassBackdrop: GlassBackdrop?,
+    /** 设置搜索状态（搜索框挂在页面采样层外，与列表共享） */
+    val searchState: SettingsSearchState? = null,
     /** 是否显示「更新」入口（iOS 走 App Store → false） */
     val showUpdateSettings: Boolean = true,
+    /** 是否显示「桌面小部件」入口（鸿蒙无小组件能力） */
+    val showWidgetEntry: Boolean = true,
 )
 
 /**
@@ -150,7 +155,9 @@ internal fun RenderSettingsPane(
             navBarStyle = args.navBarStyle,
             settingsScrollBehavior = args.settingsScrollBehavior,
             liquidGlassBackdrop = args.liquidGlassBackdrop,
+            searchState = args.searchState,
             showUpdateSettings = args.showUpdateSettings,
+            showWidgetEntry = args.showWidgetEntry,
         )
     }
 }

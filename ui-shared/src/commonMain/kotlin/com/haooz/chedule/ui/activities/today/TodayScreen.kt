@@ -22,8 +22,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +45,7 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
@@ -75,7 +78,11 @@ import com.haooz.chedule.i18n.CommonStr
 import com.haooz.chedule.i18n.L10n
 import com.haooz.chedule.i18n.TodayStr
 import com.haooz.chedule.ui.activities.classschedule.ScheduleViewMode
+import com.haooz.chedule.ui.activities.main.MorePopupMenus
+import com.haooz.chedule.ui.activities.main.PageLockedTopBarTheme
+import com.haooz.chedule.ui.activities.main.PageMoreMenuState
 import com.haooz.chedule.ui.activities.main.PagerJumpNeighbor
+import com.haooz.chedule.ui.activities.main.TodayTopBar
 import com.haooz.chedule.ui.activities.main.jumpToPageSmoothly
 import com.haooz.chedule.ui.components.CourseDetailSheet
 import com.haooz.chedule.ui.components.HorizontalPageSwitch
@@ -93,6 +100,10 @@ import com.haooz.chedule.ui.utils.isAppDarkTheme
 import com.haooz.chedule.viewmodel.CourseViewModel
 import com.haooz.chedule.viewmodel.SettingsViewModel
 import com.haooz.softglass.backdrop.GlassBackdrop
+import com.haooz.softglass.backdrop.backdrops.LayerBackdrop
+import com.haooz.softglass.backdrop.backdrops.layerBackdrop
+import com.haooz.softglass.backdrop.backdrops.rememberCombinedBackdrop
+import com.haooz.softglass.backdrop.backdrops.rememberLayerBackdrop
 import com.haooz.softglass.shape.ContinuousCapsule
 import com.haooz.softglass.shape.ContinuousRoundedRectangle
 import kotlin.random.Random
@@ -134,6 +145,31 @@ class TodayAssistantCardData(
     val showClassroom: Boolean,
     val showTeacher: Boolean,
     val surfaceOpacity: Float,
+)
+
+/**
+ * 今日页顶栏的宿主注入数据。
+ *
+ * 顶栏现在由页面自己组合（与设置页 DocumentPageScaffold 同一套口径），
+ * 这里只保留页面算不出来的外部动作与几何参数；日期、是否今天等由页面内部状态直接读。
+ */
+class TodayPageChrome(
+    val forcedDarkTheme: Boolean?,
+    /** 共享壁纸采样层；页面会把「壁纸 + 本页内容」组合后给顶栏/菜单采样，避免采到自己 */
+    val wallpaperBackdrop: GlassBackdrop? = null,
+    /** 「更多」按钮/菜单宿主状态；null 表示不渲染 */
+    val moreMenu: PageMoreMenuState? = null,
+    /** 外层统一持有的本页内容采样层；null 时页面自建（独立使用 / 预览） */
+    val contentBackdrop: LayerBackdrop? = null,
+    val onJumpToDate: () -> Unit = {},
+    val onEnterCustomize: () -> Unit = {},
+    val onCourseManage: () -> Unit = {},
+    val titleEndPadding: Dp = 0.dp,
+    val blurResampleKey: Int = 0,
+    val blurSampleTrack: () -> Float = { 0f },
+    /** 本页内容采样层的录制指纹/强制重录谓词（与主内容层同源，滚动/动画时同步刷新） */
+    val contentRecordKey: Any? = null,
+    val contentMustRecord: (() -> Boolean)? = null,
 )
 
 @Composable
@@ -340,10 +376,10 @@ fun TodayScreen(
     settingsViewModel: SettingsViewModel,
     /**
      * 只在课程详情弹窗里用：点弹窗卡片进全屏详情时，要把那张源卡片藏掉，
-     * 否则放大层和原卡片会叠在一起动（morph 看起来发糊）。
+     * 否则整页快照里会留下它，形变里就多出一张原卡。
      *
- * 今日页的课程列表**不读**这个值 —— 它不直接进详情，藏起来只会在返回时闪一帧空白。
- */
+     * 今日页的课程列表**不读**这个值 —— 它不直接进详情。
+     */
     hiddenCourseIds: Set<String> = emptySet(),
     onCourseClick: (courses: List<Course>, cardLeft: Float, cardTop: Float, cardWidth: Float, cardHeight: Float, snapshot: TransitionLayerSnapshot?, courseIdToHide: String, targetWeek: Int) -> Unit = { _, _, _, _, _, _, _, _ -> },
     /** 翻日位置来源。 */
@@ -374,11 +410,17 @@ fun TodayScreen(
     holidayDataTick: Int = 0,
     /** 今日助手卡（天气+智能提示）槽位：Android 宿主注入 TodayAssistantCard；null 不渲染 */
     todayAssistantCard: (@Composable (TodayAssistantCardData) -> Unit)? = null,
-    /** 课表页当前呈现方式：时间轴时今日页也换成时间轴（外观弹窗里那个开关，两页共用） */
+    /** 本页实际呈现方式：由宿主按「今日页视图」设置解析好（可独立于课表页） */
     scheduleViewMode: ScheduleViewMode = ScheduleViewMode.WEEK,
+    /**
+     * 越界状态：主界面注入同一实例，顶栏（Scaffold topBar 槽）与内容才读得到同一份越界量。
+     * 独立使用时默认自建一份。
+     */
+    overScrollState: OverScrollState = remember { OverScrollState() },
+    /** 顶栏宿主数据；null 时本页不画顶栏（独立使用 / 预览） */
+    chrome: TodayPageChrome? = null,
 ) {
     val todayIsDark = isAppDarkTheme()
-    val overScrollState = remember { OverScrollState() }
     // 当前页的列表状态：draw 期直接读，滚动时同步失效；不要用异步 tick（会晚一帧、看起来在跳）
     val currentListState = remember { mutableStateOf<LazyListState?>(null) }
     val baseGlassSignal: () -> Unit = remember(pageState, overScrollState, tabRedraw, settingsScrollBehavior) {
@@ -511,7 +553,6 @@ fun TodayScreen(
     val highlightCardOpacity = (p + CombinationDefaults.HIGHLIGHT_SURFACE_ALPHA_BONUS)
         .coerceIn(0f, 1f)
 
-
     val isTablet = navBarStyle == "rail"
     val nativeChromeInset = LocalHostNavigation.current
         ?.takeIf { it.showsNativeTabBar && !isTablet }
@@ -525,6 +566,46 @@ fun TodayScreen(
             detailSheetWeek = targetWeek
             showDetailSheet = true
         }
+    // 内容单独录一层（页面坐标）：顶栏/菜单在层外，采样「壁纸 + 本页内容」，
+    // 不会把自己的模糊带/按钮再录进去形成循环采样。
+    val contentBackdrop = chrome?.contentBackdrop ?: rememberLayerBackdrop()
+    val glassLayersEnabled =
+        !com.haooz.chedule.ui.utils.AppMaterialSettings.isNoneTier() && chrome != null
+    val wallpaperBackdrop = chrome?.wallpaperBackdrop
+    val chromeBackdrop: GlassBackdrop = if (wallpaperBackdrop != null) {
+        rememberCombinedBackdrop(wallpaperBackdrop, contentBackdrop)
+    } else {
+        contentBackdrop
+    }
+    val moreSlotTopPx = remember { mutableFloatStateOf(0f) }
+    val moreMaterialAlpha = remember { mutableFloatStateOf(0f) }
+    val pageRootCoords = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    // 顶栏单独录一层：展开的「更多」菜单采「本页内容 + 本页顶栏」，不会采到自己
+    val topBarBackdrop = rememberLayerBackdrop()
+    val menuBackdrop = if (wallpaperBackdrop != null) {
+        rememberCombinedBackdrop(wallpaperBackdrop, contentBackdrop, topBarBackdrop)
+    } else {
+        rememberCombinedBackdrop(contentBackdrop, topBarBackdrop)
+    }
+    // 这层只为「更多」菜单服务：菜单收起且展开动画归零就摘掉，不让顶栏每帧白录一层
+    val topBarLayerWanted by remember(chrome?.moreMenu) {
+        derivedStateOf {
+            val menu = chrome?.moreMenu
+            menu != null && (menu.show || menu.fraction.value > 0f)
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { pageRootCoords[0] = it }
+    ) {
+    Box(Modifier.fillMaxSize().then(
+        if (glassLayersEnabled) {
+            Modifier.layerBackdrop(contentBackdrop, chrome?.contentRecordKey, chrome?.contentMustRecord)
+        } else {
+            Modifier
+        }
+    )) {
     CompositionLocalProvider(
         LocalSoftGlassSurface provides softGlassSurface,
         LocalOverScrollState provides overScrollState,
@@ -821,14 +902,13 @@ fun TodayScreen(
                                 .weight(1f)
                                 .collapsibleTopInset(settingsScrollBehavior)
                                 .fillMaxHeight()
+                                .overScrollVertical()
                                 .scrollEndHaptic(
                                     hapticFeedbackType = HapticFeedbackType.TextHandleMove
                                 )
                                 .then(
                                     if (settingsScrollBehavior != null) Modifier.nestedScroll(settingsScrollBehavior.nestedScrollConnection) else Modifier
-                                )
-                                // 放在最后 = 最靠近列表，优先收到 fling，与手机设置页一致
-                                .overScrollVertical(),
+                                ),
                             contentPadding = PaddingValues(
                                 top = paddingValues.calculateTopPadding() +
                                     CollapsibleTopAppBarDefaults.CollapsedHeight + 14.dp,
@@ -854,13 +934,14 @@ fun TodayScreen(
                         modifier = Modifier
                             .collapsibleTopInset(settingsScrollBehavior)
                             .fillMaxSize()
+                            // 采样连接必须最贴近列表：越界回弹位移不能算进 contentOffset
+                            .overScrollVertical()
                             .scrollEndHaptic(
                                 hapticFeedbackType = HapticFeedbackType.TextHandleMove
                             )
                             .then(
                                 if (settingsScrollBehavior != null) Modifier.nestedScroll(settingsScrollBehavior.nestedScrollConnection) else Modifier
-                            )
-                            .overScrollVertical(),
+                            ),
                         contentPadding = PaddingValues(
                             start = tabletHorizontalPadding,
                             top = paddingValues.calculateTopPadding() +
@@ -941,7 +1022,7 @@ fun TodayScreen(
             selectedCourses = detailSheetCourses,
             viewingWeek = detailSheetWeek,
             isTablet = isTablet,
-            // 弹窗里的源卡片照常藏掉：morph 起点就是它，不藏会和放大层叠在一起动
+            // 弹窗里的源卡片要先藏掉：进全屏详情时整页快照不能拍进它
             hiddenCourseIds = hiddenCourseIds,
             onDismiss = { showDetailSheet = false },
             onCourseClick = onCourseClick,
@@ -1048,6 +1129,61 @@ fun TodayScreen(
                         },
                         colors = ButtonDefaults.textButtonColorsPrimary(),
                         modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+    }
+        // 顶栏与页面同层：翻日 / 切 tab 时跟着页面一起位移，不再由外层按页码算偏移
+        chrome?.let { c ->
+            PageLockedTopBarTheme(c.forcedDarkTheme) {
+                Box(Modifier.then(
+                    if (glassLayersEnabled && topBarLayerWanted) Modifier.layerBackdrop(topBarBackdrop) else Modifier
+                )) {
+                TodayTopBar(
+                    liquidGlassBackdrop = chromeBackdrop,
+                    navBarStyle = navBarStyle,
+                    currentDayOfWeek = selectedDate.dayOfWeek.isoDayNumber,
+                    isToday = isToday,
+                    onJumpToDate = c.onJumpToDate,
+                    onEnterCustomize = c.onEnterCustomize,
+                    scrollBehavior = settingsScrollBehavior,
+                    visible = true,
+                    blurResampleKey = c.blurResampleKey,
+                    blurSampleTrack = c.blurSampleTrack,
+                    onMoreSlotTop = { slot ->
+                        // 换算成相对页面根的局部坐标，避免外层开洞缩放把「更多」位置算得偏高
+                        val root = pageRootCoords[0]
+                        if (root != null && root.isAttached && slot.isAttached) {
+                            moreSlotTopPx.floatValue = root.localPositionOf(slot, Offset.Zero).y
+                        }
+                    },
+                    onMoreMaterial = { moreMaterialAlpha.floatValue = it },
+                    onMoreExpand = { c.moreMenu?.onExpand?.invoke() },
+                    titleEndPadding = c.titleEndPadding,
+                )
+                }
+                c.moreMenu?.let { menu ->
+                    MorePopupMenus(
+                        showMorePopup = false,
+                        onMorePopupDismiss = {},
+                        showTodayMorePopup = menu.show,
+                        onTodayMorePopupDismiss = menu.onDismiss,
+                        onTodayMorePopupExpand = menu.onExpand,
+                        morePopupFraction = remember { androidx.compose.animation.core.Animatable(0f) },
+                        todayMorePopupFraction = menu.fraction,
+                        todayMenuOffset = { Offset.Zero },
+                        moreSlotTopPx = moreSlotTopPx,
+                        todayMaterialAlpha = moreMaterialAlpha.floatValue,
+                        liquidGlassBackdrop = menuBackdrop,
+                        enabled = menu.enabled,
+                        todayMoreNative = menu.native,
+                        scheduleMoreNative = true,
+                        onJumpWeek = {},
+                        onCourseManage = c.onCourseManage,
+                        onEnterCustomize = c.onEnterCustomize,
+                        onJumpToDate = c.onJumpToDate,
                     )
                 }
             }

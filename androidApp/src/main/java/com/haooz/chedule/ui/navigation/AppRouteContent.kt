@@ -49,6 +49,7 @@ import com.haooz.chedule.ui.utils.performScheduleShare
 import com.haooz.chedule.ui.web.rememberAndroidWebHost
 import com.haooz.chedule.viewmodel.SettingsViewModel
 import com.haooz.chedule.wearable.WearableScheduleSync
+import com.haooz.chedule.wearable.rememberWatchSyncController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -122,14 +123,14 @@ fun AppRouteContent(
             )
         }
 
-        AppRoute.LocalBackup -> {
+        AppRoute.UpdatePreferences -> UpdatePreferencesRoute(router = router)
+
+        AppRoute.ScheduleBackup -> {
             val context = LocalContext.current
-            LocalBackupRoute(
+            BackupCenterRoute(
                 router = router,
                 backupFileController = remember { AndroidBackupFileController(context) },
-                onHolidayDataChanged = {
-                    CourseReminderHelper.onHolidayDataChanged(context)
-                },
+                onHolidayDataChanged = { CourseReminderHelper.onHolidayDataChanged(context) },
             )
         }
 
@@ -147,7 +148,6 @@ fun AppRouteContent(
         }
 
         // ── 导入导出 / 备份与同步 ──
-        AppRoute.ScheduleBackup -> AndroidBackupAndMigrationRoute(router, ScheduleDataManageMode.Backup)
         // 导入 / 导出同页，顶部胶囊切换
         AppRoute.ImportExport -> AndroidBackupAndMigrationRoute(
             router,
@@ -244,6 +244,7 @@ fun AppRouteContent(
             val context = LocalContext.current
             WebDavSettingsRoute(
                 router = router,
+                backupFileController = remember { AndroidBackupFileController(context) },
                 onHolidayDataChanged = { CourseReminderHelper.onHolidayDataChanged(context) },
             )
         }
@@ -270,14 +271,8 @@ fun AppRouteContent(
 }
 
 /**
- * 课表导入 / 导出 / 备份的 **Android 包装**。
- *
- * ⚠ 这三个入口**必须**走路由，不能再是 Activity：原来 `BackupAndMigrationActivity`
- * 是独立 Activity，`BackupAndMigrationScreen` 里的「本地备份」入口读 [LocalAppRouter]，
- * 而那个 Activity 的 setContent 没有 provide，默认值是 `error(...)` —— 一点开就崩。
- *
- * 这里只剩四条 Android 专有能力的装配：文件选择器 / 提醒重排 / 口令取回与抓取 /
- * 口令分享出图 / 手环推送。三者共用同一份装配，只是 `mode` 不同。
+ * 课表导入 / 导出的 **Android 包装**：文件选择器 / 提醒重排 / 口令取回与抓取 /
+ * 口令分享出图 / 手环推送。
  */
 @Composable
 private fun AndroidBackupAndMigrationRoute(
@@ -322,6 +317,8 @@ private fun AndroidBackupAndMigrationRoute(
         },
         // 手环推送
         onExportToWearable = { name -> WearableScheduleSync.exportToWearable(context, name) },
+        // 手表蓝牙推送（扫描 + 分片写入）
+        watchSyncController = rememberWatchSyncController(),
         // 同步到日历（缺权限时点一下就申请）
         onSyncToCalendar = rememberCalendarSyncAction(),
     )

@@ -98,10 +98,10 @@ object ChromeStr {
 
     val appPreferences = L("应用个性化", "Personalization")
     val updateSettingsTitle = L("更新", "Update")
-    val localBackup = L("本地备份", "Local Backup")
+
+    /** 更新设置页（更新通道 / 下载源）。 */
+    val updatePreferencesTitle = L("更新设置", "Update Settings")
     val aiImport = L("AI 文本导入", "AI Text Import")
-    val webImport = L("网页导入", "Web Import")
-    val educationalImport = L("教务导入", "Academic System Import")
 
     val updating = L("更新中", "Updating")
     val holidaysTitle = L("节假日与调休", "Holidays & Adjusted Workdays")
@@ -124,23 +124,17 @@ object ChromeStr {
     val connected = L("已连接", "Connected")
     val testConnection = L("测试连接", "Test Connection")
     val webdavBackup = L("WebDAV 云同步", "WebDAV Cloud Sync")
-    val backingUp = L("备份中…", "Backing up…")
-    val backupToCloud = L("同步到云端", "Sync to Cloud")
-    val restoring = L("恢复中…", "Restoring…")
-    val restoreFromCloud = L("从云端恢复", "Restore from Cloud")
 
     /** %s = 能力名（口令导入 / 第三方来源显示名） */
     val platformUnsupported = L("当前平台不支持%s", "%s is not supported on this platform")
     val shareCodeImport = L("口令导入", "Share Code Import")
 
-    val scheduleImport = L("课表导入", "Import Schedule")
-    val scheduleExport = L("课表导出", "Export Schedule")
     val scheduleBackup = L("备份与同步", "Backup & Sync")
     /** 导入导出页胶囊短标签。 */
     val importTab = L("导入", "Import")
     val exportTab = L("导出", "Export")
 
-    val classTimeSettings = L("课程时间管理", "Class Time Settings")
+    val classTimeSettings = L("上课时间", "Class Time")
     val saveFailedRetry = L("保存失败，请重试", "Save failed, please try again")
 
     // ── 路由器 ──

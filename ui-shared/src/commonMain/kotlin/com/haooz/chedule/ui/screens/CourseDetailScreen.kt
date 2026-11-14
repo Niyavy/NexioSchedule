@@ -32,6 +32,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -78,6 +79,8 @@ import top.yukonga.miuix.kmp.layout.CollapsibleTopAppBar
 import top.yukonga.miuix.kmp.layout.ProgressiveBlurTopBar
 import top.yukonga.miuix.kmp.layout.isTabletWidth
 import top.yukonga.miuix.kmp.layout.rememberSharedScrollBehavior
+import top.yukonga.miuix.kmp.layout.TopBarMaterialThreshold
+import top.yukonga.miuix.kmp.layout.rememberTopBarMaterialState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -101,6 +104,8 @@ fun CourseDetailScreen(
     // 点击来源所在的周次（今日页=当前浏览日期所在周，bottomsheet=当前查看周），
     // 进入后自动滚动到对应周分组；<=0 表示不滚动。
     targetWeek: Int = 0,
+    /** false = 先以起点卡态上屏，等宿主持源卡藏掉、整页快照就位后再放行动画 */
+    morphStarted: Boolean = true,
     onBackStart: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -157,6 +162,7 @@ fun CourseDetailScreen(
         startCornerRadiusDp = 20f,
         onBackStart = onBackStart,
         onBack = onBack,
+        autoStart = morphStarted,
     )
 
 
@@ -166,19 +172,21 @@ fun CourseDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                if (isDark) ComposeColor(0xFF2C2C2C).copy(alpha = morph.state.value.bgAlpha)
-                else ComposeColor.Black.copy(alpha = morph.state.value.bgAlpha)
-            )
+            .drawBehind {
+                val alpha = morph.state.value.bgAlpha
+                drawRect(
+                    if (isDark) ComposeColor(0xFF2C2C2C).copy(alpha = alpha)
+                    else ComposeColor.Black.copy(alpha = alpha)
+                )
+            }
             // 只挡下层穿透、不 consume：consumeAllTouches 会连 LazyColumn 拖动一起吃掉
             .blockTouchPassThrough()
     ) {
-        val s = morph.state.value
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    val s = morph.state.value
                     clip = false
                     transformOrigin = TransformOrigin(s.anchorX, 0.5f)
                     scaleX = s.scale
@@ -189,14 +197,14 @@ fun CourseDetailScreen(
                 .morphClip(morph)
                 .background(MiuixTheme.colorScheme.background)
         ) {
-            if (cardSnapshot != null && s.snapshotAlpha > 0f) {
+            if (cardSnapshot != null) {
                 TransitionLayerImage(
                     snapshot = cardSnapshot,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
                         .clip(ContinuousRoundedRectangle(20.dp))
-                        .graphicsLayer { alpha = s.snapshotAlpha },
+                        .graphicsLayer { alpha = morph.state.value.snapshotAlpha },
                     contentScale = ContentScale.FillWidth,
                     alignment = Alignment.TopStart,
                 )
@@ -205,8 +213,10 @@ fun CourseDetailScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = s.contentAlpha }
+                    .graphicsLayer { alpha = morph.state.value.contentAlpha }
             ) {
+                // 按钮玻璃走全站统一判据（本页遮罩常驻，不接 maskAlpha）
+                val material = rememberTopBarMaterialState(scrollBehavior)
                 Scaffold(
                     topBar = {
                         ProgressiveBlurTopBar(
@@ -220,6 +230,7 @@ fun CourseDetailScreen(
                                     WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
                                 ),
                                 scrollBehavior = scrollBehavior,
+                                materialState = material,
                                 contentPadding = {},
                                 startAction = { backdropAlpha, shadowAlpha ->
                                     LiquidTopBarButton(
@@ -256,7 +267,7 @@ fun CourseDetailScreen(
                             // 程序化滚动不走 nestedScroll：监听 listState 同步 contentOffset 与标题栏
                             var isProgrammaticScroll by remember { mutableStateOf(false) }
                             var lastCollapsed by remember { mutableStateOf(false) }
-                            val scrollThresholdPx = with(density) { 10.dp.toPx() }
+                            val scrollThresholdPx = with(density) { TopBarMaterialThreshold.toPx() }
                             LaunchedEffect(listState) {
                                 snapshotFlow {
                                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset

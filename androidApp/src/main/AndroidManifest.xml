@@ -11,6 +11,18 @@
     <!-- 用于天气按当前位置查询（优先精确 GPS，回退粗略网络定位） -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- 导出到手表：BLE 扫描 + 连接。neverForLocation 表示扫描结果不用于推断位置 -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Android 11 及以下没有 BLUETOOTH_SCAN/CONNECT，靠旧权限 + 定位权限扫描 -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"
         tools:ignore="RequestInstallPackagesPolicy" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -148,15 +160,23 @@
             android:name=".reminder.CourseStartReceiver"
             android:exported="false" />
 
-        <!-- 上课勿扰：接收实况通知/超级岛按钮与上课、下课闹钟（exported：需要系统通知栏发送广播） -->
+        <!-- 上课勿扰闹钟：仅本应用排期 -->
         <receiver
             android:name=".reminder.ClassDndReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.haooz.chedule.ACTION_CLASS_DND_START" />
+                <action android:name="com.haooz.chedule.ACTION_CLASS_DND_END" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 通知 / 超级岛按钮：由系统通知栏发送，必须导出 -->
+        <receiver
+            android:name=".reminder.ClassDndToggleReceiver"
             android:exported="true"
             tools:ignore="ExportedReceiver">
             <intent-filter>
                 <action android:name="com.haooz.chedule.ACTION_CLASS_DND_TOGGLE" />
-                <action android:name="com.haooz.chedule.ACTION_CLASS_DND_START" />
-                <action android:name="com.haooz.chedule.ACTION_CLASS_DND_END" />
             </intent-filter>
         </receiver>
 

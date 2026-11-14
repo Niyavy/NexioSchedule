@@ -1,12 +1,11 @@
 package com.haooz.chedule.ui.utils
 
-import com.haooz.softglass.GlassEnvironment
-
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import com.haooz.chedule.data.appearance.ThemeMode
 import com.haooz.chedule.data.storage.AppStorage
@@ -52,28 +51,15 @@ fun courseCardNoneTierBacking(isDark: Boolean): Color =
     schedulePageBackgroundColor(isDark).copy(alpha = COURSE_CARD_BACKING_ALPHA)
 
 /**
- * 主题亮暗的全局快照，供 draw 阶段这类非组合上下文读取 ——
- * [isAppDarkTheme] 是 `@Composable`，绘制里调不了。由它每次组合后写入。
- * 别名指向 backdrop 的同一实例，保证写入的值就是那边读到的值。
+ * 当前作用域生效的深浅色：页面按壁纸强制的口径优先，否则读应用主题 / 系统。
+ *
+ * 纯读函数，**不写任何全局快照**。
+ * `GlassEnvironment.isDark` 只由 [com.haooz.chedule.ui.theme.CourseScheduleTheme]
+ * 根部唯一写入，供少量 draw 期观感（按压高光 / 阴影）使用。
  */
-
-/**
- * 当前可见主页面背后是否为壁纸，供 draw 阶段读取（理由同 [AppThemeSnapshot]）。
- * 由宿主写入：浅色下高光默认压到 0.05，背后有壁纸时给到 0.1（近白底加白会被截断成白斑）。
- */
-
-/** 当前生效的深浅色；顺带把结果写进 [AppThemeSnapshot] 供 draw 阶段读取 */
 @Composable
-fun isAppDarkTheme(): Boolean {
-    val forced = LocalForcedDarkTheme.current
-    if (forced != null) {
-        SideEffect { GlassEnvironment.update(isDark = forced) }
-        return forced
-    }
-    val dark = rememberAppSettingDark()
-    SideEffect { GlassEnvironment.update(isDark = dark) }
-    return dark
-}
+fun isAppDarkTheme(): Boolean =
+    LocalForcedDarkTheme.current ?: rememberAppSettingDark()
 
 /**
  * App 偏好里的「是否深色」（`theme_mode`：system / light / dark）。
@@ -103,6 +89,27 @@ internal fun installAppSettingDarkBridge() {
         unsubscribe
     }
     AppSettingDarkBridge.subscribe = subscribe
+}
+
+// ── 今日页天气显隐 ───────────────────────────────────────────────────────
+// 与触感反馈共用 app_preferences；键名是落盘契约，改了即丢用户选择。
+// 键名沿用旧值：历史上它同时控制信息卡，现在语义收窄为「只控制天气」。
+const val KEY_TODAY_INFO_CARDS = "today_info_cards_enabled"
+
+/** 关闭后今日页助手卡、课表顶栏都不再显示天气；日期、信息卡与课程不受影响。 */
+@Composable
+fun rememberWeatherVisible(): Boolean {
+    val prefs = remember { AppStorage.store("app_preferences") }
+    var enabled by remember { mutableStateOf(prefs.getBoolean(KEY_TODAY_INFO_CARDS, true)) }
+    DisposableEffect(prefs) {
+        val token = prefs.registerListener { key ->
+            if (key == KEY_CHANGED_ANYWHERE || key == KEY_TODAY_INFO_CARDS) {
+                enabled = prefs.getBoolean(KEY_TODAY_INFO_CARDS, true)
+            }
+        }
+        onDispose { prefs.unregisterListener(token) }
+    }
+    return enabled
 }
 
 // ── 课表页「默认主题」档位 ───────────────────────────────────────────────
@@ -149,6 +156,48 @@ fun saveScheduleViewMode(mode: ScheduleViewMode) {
             SCHEDULE_VIEW_MODE_KEY,
             if (mode == ScheduleViewMode.TIMELINE) VIEW_MODE_TIMELINE else VIEW_MODE_WEEK
         )
+    }
+}
+
+// ── 今日页视图模式（周网格 / 时间轴）──────────────────────────────────
+// 与课表页共用 app_theme_prefs 文件但键独立：今日页可以单独开时间轴，课表页保持周视图。
+
+private const val TODAY_VIEW_MODE_KEY = "today_view_mode"
+private const val TODAY_VIEW_WEEK = 0
+private const val TODAY_VIEW_TIMELINE = 1
+
+/** 今日页呈现方式：周网格 / 时间轴（不再提供「跟随课表页」档位）。 */
+enum class TodayViewMode(val prefsValue: Int) {
+    WEEK(TODAY_VIEW_WEEK),
+    TIMELINE(TODAY_VIEW_TIMELINE);
+
+    companion object {
+        fun fromPrefs(value: Int): TodayViewMode? =
+            entries.firstOrNull { it.prefsValue == value }
+    }
+}
+
+/**
+ * 读今日页视图模式。
+ *
+ * 没有存过值时按课表页当前视图初始化（旧版存的是「跟随」-1，也走这条）：
+ * 老用户升级后首屏观感不变，之后再改今日页视图就与课表页解耦。
+ */
+fun loadTodayViewMode(): TodayViewMode =
+    TodayViewMode.fromPrefs(
+        AppStorage.store(SCHEDULE_THEME_PREFS_FILE).getInt(TODAY_VIEW_MODE_KEY, -1)
+    ) ?: run {
+        if (loadScheduleViewMode() == ScheduleViewMode.TIMELINE) {
+            TodayViewMode.TIMELINE
+        } else {
+            TodayViewMode.WEEK
+        }
+    }
+
+/** 写今日页视图模式（课表外观弹窗切换时落盘） */
+fun saveTodayViewMode(mode: TodayViewMode) {
+    AppStorage.store(SCHEDULE_THEME_PREFS_FILE).edit {
+        putInt(TODAY_VIEW_MODE_KEY, mode.prefsValue)
     }
 }
 

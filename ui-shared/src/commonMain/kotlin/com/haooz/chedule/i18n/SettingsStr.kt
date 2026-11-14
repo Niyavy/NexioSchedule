@@ -3,12 +3,16 @@ package com.haooz.chedule.i18n
 /** 设置页（手机页 + 平板双栏页）文案 */
 object SettingsStr {
 
+    // ---- 搜索 ----
+    val searchSettings = L("搜索设置项", "Search settings")
+    val searchNoResults = L("未找到相关设置", "No matching settings")
+
     // ---- 分区标题 ----
     val basicSettings = L("基本设置", "General")
     val featuresSection = L("特色功能", "Features")
 
     // ---- 基本设置总览卡片 ----
-    val scheduleSettings = L("课程表", "Schedule")
+    val scheduleSettings = L("课表管理", "Schedule Management")
     /** 折叠态摘要：开始上课日期 · 当前周 / 总周数 */
     val scheduleSettingsSummary = L("%s · 第%d周 / 共%d周", "%s · Week %d / %d weeks")
     /** 未开学 / 放假中：当前周换成状态文案 */
@@ -33,7 +37,7 @@ object SettingsStr {
     val selectTotalWeeks = L("选择学期总周数", "Select Total Weeks")
 
     // ---- 课程时间 ----
-    val courseTimeManagement = L("课程时间管理", "Class Time Settings")
+    val courseTimeManagement = L("上课时间", "Class Time")
     val classTime = L("上课时间", "Class Time")
     val courseTimeSummary = L("管理课表的节数与课程时间", "Manage periods and course times in your schedule")
 

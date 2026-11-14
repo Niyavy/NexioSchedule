@@ -65,6 +65,7 @@ import com.haooz.chedule.data.platform.randomUuidV4
 import com.haooz.chedule.data.platform.showToast
 import com.haooz.chedule.i18n.CommonStr
 import com.haooz.chedule.i18n.SwitchStr
+import com.haooz.chedule.ui.components.pageTopExtra
 import com.haooz.chedule.ui.components.text.material.Text as Text
 import com.haooz.chedule.ui.theme.rememberCourseColors
 import com.haooz.chedule.ui.utils.CourseSorting
@@ -240,7 +241,8 @@ fun CourseManageScreen(
 
                 val resolvedTopPadding = contentTopPadding
                     ?: (paddingValues.calculateTopPadding() +
-                        CollapsibleTopAppBarDefaults.CollapsedHeight + 12.dp)
+                        CollapsibleTopAppBarDefaults.CollapsedHeight +
+                        pageTopExtra(isTablet, hasSmallTitle = false))
 
                 if (groupedCourses.isEmpty()) {
                     // 空状态
@@ -802,14 +804,12 @@ private fun CourseManageCard(
                     onLongPress(cardLeft, cardTop, cardWidth, cardHeight, TransitionLayerSnapshot(cardLayer))
                 }
             )
-            // Keep hiding outside the recorded content so the editor can still replay it.
+            // 隐藏只乘透明度、且留在录制之外：编辑页要重放这张卡的图层，内容不能被抹掉
             .graphicsLayer { alpha = if (isHidden) 0f else 1f }
             .drawWithContent {
-                if (!isHidden) {
-                    cardLayer.record {
-                        drawRect(cardBackground)
-                        this@drawWithContent.drawContent()
-                    }
+                cardLayer.record {
+                    drawRect(cardBackground)
+                    this@drawWithContent.drawContent()
                 }
                 drawLayer(cardLayer)
             }

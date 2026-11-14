@@ -32,7 +32,9 @@ import com.haooz.chedule.data.platform.FeedbackKind
 import com.haooz.chedule.data.platform.RoadmapRecord
 import com.haooz.chedule.i18n.FeedbackStr
 import com.haooz.chedule.ui.components.FeedbackKindLabel
+import com.haooz.chedule.ui.components.FeedbackReplyBlock
 import com.haooz.chedule.ui.components.FeedbackStageBar
+import com.haooz.chedule.ui.components.pageTopExtra
 import com.haooz.chedule.ui.components.text.material.Text as Text
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -104,7 +106,8 @@ fun FeedbackRoadmapScreen(
             contentPadding = PaddingValues(
                 start = horizontalPadding,
                 end = horizontalPadding,
-                top = paddingValues.calculateTopPadding() + CollapsibleTopAppBarDefaults.CollapsedHeight + topExtra,
+                top = paddingValues.calculateTopPadding() + CollapsibleTopAppBarDefaults.CollapsedHeight +
+                    pageTopExtra(isTablet, hasSmallTitle = false) + topExtra,
                 bottom = 60.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -208,7 +211,11 @@ private fun RoadmapCard(record: RoadmapRecord) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        // 与上方内容（说明 / 标题）之间 14dp
+        if (record.statusNote.isNotBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            FeedbackReplyBlock(reply = record.statusNote)
+        }
+        // 与上方内容（说明 / 官方回复）之间 14dp
         Spacer(modifier = Modifier.height(14.dp))
         FeedbackStageBar(status = record.status, kind = record.kind)
     }

@@ -46,6 +46,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.TransformOrigin
@@ -107,6 +108,7 @@ import top.yukonga.miuix.kmp.layout.CollapsibleTopAppBar
 import top.yukonga.miuix.kmp.layout.ProgressiveBlurTopBar
 import top.yukonga.miuix.kmp.layout.isTabletWidth
 import top.yukonga.miuix.kmp.layout.rememberSharedScrollBehavior
+import top.yukonga.miuix.kmp.layout.rememberTopBarMaterialState
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import com.haooz.softglass.shape.continuousBorder
 import com.haooz.softglass.shape.continuousClip
@@ -180,6 +182,8 @@ fun CourseEditScreen(
     dialogBackdrop: GlassBackdrop? = null,
     /** 内嵌时由外部指定内容顶距（与左栏 chromeTop 对齐），替代按顶栏高度推算 */
     contentTopPadding: androidx.compose.ui.unit.Dp? = null,
+    /** false = 先停在起点卡态，等宿主持源卡藏掉、整页快照上屏后再放行展开 */
+    morphStarted: Boolean = true,
 ) {
     // 弹窗默认跟随自身玻璃层；内嵌时由外层指定全屏层
     val dialogGlass: GlassBackdrop? = dialogBackdrop ?: liquidGlassBackdrop
@@ -216,6 +220,7 @@ fun CourseEditScreen(
         onBackStart = onBackStart,
         onBack = onBack,
         embedded = embedded,
+        autoStart = morphStarted,
     )
 
     // ---- UI State ----
@@ -305,19 +310,21 @@ fun CourseEditScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                if (isDark) ComposeColor(0xFF2C2C2C).copy(alpha = morph.state.value.bgAlpha)
-                else ComposeColor.Black.copy(alpha = morph.state.value.bgAlpha)
-            )
+            .drawBehind {
+                val alpha = morph.state.value.bgAlpha
+                drawRect(
+                    if (isDark) ComposeColor(0xFF2C2C2C).copy(alpha = alpha)
+                    else ComposeColor.Black.copy(alpha = alpha)
+                )
+            }
             // 只挡下层穿透、不 consume，避免内部列表/控件滑不动
             .blockTouchPassThrough()
     ) {
-        val s = morph.state.value
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    val s = morph.state.value
                     clip = false
                     transformOrigin = TransformOrigin(s.anchorX, 0.5f)
                     scaleX = s.scale
@@ -329,14 +336,18 @@ fun CourseEditScreen(
                 .background(MiuixTheme.colorScheme.surface)
                 .background(cardColor.copy(alpha = cardAlpha))
         ) {
-            if (cardSnapshot != null && s.snapshotAlpha > 0f) {
+            if (cardSnapshot != null) {
                 TransitionLayerImage(
                     snapshot = cardSnapshot,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
-                        .clip(ContinuousRoundedRectangle((18 / s.scale).dp))
-                        .graphicsLayer { alpha = s.snapshotAlpha },
+                        .graphicsLayer {
+                            val s = morph.state.value
+                            shape = ContinuousRoundedRectangle((18 / s.scale).dp)
+                            clip = true
+                            alpha = s.snapshotAlpha
+                        },
                     contentScale = ContentScale.FillWidth
                 )
             }
@@ -344,12 +355,14 @@ fun CourseEditScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = s.contentAlpha }
+                    .graphicsLayer { alpha = morph.state.value.contentAlpha }
             ) {
                 Scaffold(
                     modifier = Modifier.consumeWindowInsets(PaddingValues(top = nativeBarInset)),
                     topBar = {
 
+                        // 本页唯一材质状态：按钮玻璃走全站同一判据（本页遮罩常驻，不接 maskAlpha）
+                        val material = rememberTopBarMaterialState(scrollBehavior)
                         ProgressiveBlurTopBar(
                             backdrop = liquidGlassBackdrop!!,
                             topInsetAdjustment = nativeBarInset,
@@ -360,6 +373,7 @@ fun CourseEditScreen(
                                 largeTitle = courseName,
                                 modifier = horizontalSafeInsets,
                                 scrollBehavior = scrollBehavior,
+                                materialState = material,
                                 contentPadding = {},
                                 startAction = if (embedded || nativeChrome != null) null else {
                                     { backdropAlpha, shadowAlpha ->

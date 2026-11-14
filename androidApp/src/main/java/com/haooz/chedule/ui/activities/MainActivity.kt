@@ -50,6 +50,7 @@ import com.haooz.chedule.ui.activities.main.CourseScheduleApp
 import com.haooz.chedule.ui.activities.main.bitmapRecycler
 import com.haooz.chedule.ui.activities.today.TodayAssistantCard
 import com.haooz.chedule.ui.components.SharedFileIntent
+import com.haooz.chedule.ui.screens.LocalTabletSettingsPaneRouteContent
 import com.haooz.chedule.ui.navigation.AppNavHost
 import com.haooz.chedule.ui.navigation.AppRoute
 import com.haooz.chedule.ui.navigation.AppRouteContent
@@ -67,6 +68,7 @@ import com.haooz.chedule.ui.utils.AndroidUpdateController
 import com.haooz.chedule.ui.utils.ApiCompat
 import com.haooz.chedule.ui.utils.applyThemeAwareSystemBars
 import com.haooz.chedule.ui.utils.performScheduleShare
+import com.haooz.chedule.ui.utils.saveScheduleImageToGallery
 import com.haooz.chedule.ui.utils.screenHeightDp
 import com.haooz.chedule.ui.utils.screenWidthDp
 import kotlinx.coroutines.Dispatchers
@@ -239,7 +241,13 @@ class MainActivity : ComponentActivity() {
                         pendingRoute = null
                     }
                 }
-                CompositionLocalProvider(LocalAppRouter provides router) {
+                CompositionLocalProvider(
+                    LocalAppRouter provides router,
+                    // 平板设置右栏用自己的局部 router
+                    LocalTabletSettingsPaneRouteContent provides { paneRouter, route ->
+                        AppRouteContent(paneRouter, route)
+                    },
+                ) {
                     // 子页盖住主界面时状态栏改跟应用主题，退出后恢复主界面深浅
                     var systemBarsFirstPass by remember { mutableStateOf(true) }
                     LaunchedEffect(router.hasOverlay) {
@@ -612,6 +620,22 @@ fun AndroidCourseScheduleApp(privacyConsented: Boolean) {
                 scheduleName = name,
                 onSharingChanged = changed,
             )
+        },
+        onSaveScheduleImage = { image ->
+            val source = image.asAndroidBitmap()
+            // GraphicsLayer 出图可能是 HARDWARE 配置，PNG 压缩前转成 ARGB_8888
+            val bitmap = if (source.config == android.graphics.Bitmap.Config.HARDWARE) {
+                source.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+            } else {
+                source
+            }
+            if (saveScheduleImageToGallery(context, bitmap)) {
+                showToast(AndroidMiscStr.scheduleImageSaved())
+            } else {
+                showToast(AndroidMiscStr.saveImageFailed())
+            }
+            // 只在额外拷贝了就回收；source 归共享层
+            if (bitmap !== source && !bitmap.isRecycled) bitmap.recycle()
         },
         onReadSharedFileText = { uriString ->
             try {

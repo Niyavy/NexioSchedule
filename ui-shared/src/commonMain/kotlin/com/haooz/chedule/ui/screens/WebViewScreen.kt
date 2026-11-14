@@ -77,7 +77,6 @@ import com.haooz.chedule.ui.utils.NativeDocumentBottomBar
 import com.haooz.chedule.ui.utils.NativeDocumentBottomBarEffect
 import com.haooz.chedule.ui.utils.bottomFloatingPadding
 import com.haooz.chedule.ui.utils.isAppDarkTheme
-import com.haooz.chedule.ui.utils.screenWidthDp
 import com.haooz.chedule.ui.web.NoopWebHost
 import com.haooz.chedule.ui.web.WebHost
 import com.haooz.chedule.ui.web.WebHostConfig
@@ -157,10 +156,7 @@ fun WebViewScreen(
     val nativeChrome = LocalNativeDocumentChrome.current
     // 76dp = Swift 侧底栏高度（44 按钮 + 上下 10 内边距 + 12 让位），给网页留出底部让位
     val bottomBarHeight = 76.dp
-    val tabletHorizontalPadding = if (isTablet) {
-        val widthDp = screenWidthDp()
-        ((widthDp - 600).coerceIn(0, 600) / 600f * 112 + 16).dp
-    } else 0.dp
+    val tabletHorizontalPadding = if (isTablet) 20.dp else 16.dp
     var loadingProgress by remember { mutableFloatStateOf(0f) }
     // 顶栏采样色：宿主逐帧上报（Android = PixelCopy）；null = 该平台没有这个能力，不画色带
     var topColor by remember { mutableStateOf<Color?>(null) }
@@ -219,11 +215,11 @@ fun WebViewScreen(
     // 非莫奈保持原硬编码（亮 #FFFFFF/0.6、暗 #121212/0.54）；无材质档实色
     val webDockSurfaceColor = if (MiuixTheme.isDynamicColor) {
         MiuixTheme.colorScheme.surfaceContainer
-            .copy(alpha = com.haooz.chedule.ui.utils.AppMaterialSettings.solidSurfaceAlpha(if (isLightTheme) 0.6f else 0.54f))
+            .copy(alpha = AppMaterialSettings.solidSurfaceAlpha(if (isLightTheme) 0.6f else 0.54f))
     } else if (isLightTheme) {
-        Color(0xFFFFFFFF).copy(com.haooz.chedule.ui.utils.AppMaterialSettings.solidSurfaceAlpha(0.6f))
+        Color(0xFFFFFFFF).copy(AppMaterialSettings.solidSurfaceAlpha(0.6f))
     } else {
-        Color(0xFF121212).copy(com.haooz.chedule.ui.utils.AppMaterialSettings.solidSurfaceAlpha(0.54f))
+        Color(0xFF121212).copy(AppMaterialSettings.solidSurfaceAlpha(0.54f))
     }
     val webDockOnDrawSurface: DrawScope.() -> Unit = remember(webDockSurfaceColor) {
         {
@@ -290,6 +286,10 @@ fun WebViewScreen(
             contentTopPadding = if (nativeChrome != null) 0.dp else contentTopPadding,
             // 原生底栏时给网页留出高度；Android 走自己的布局
             contentBottomPadding = if (nativeChrome != null) bottomBarHeight else 0.dp,
+            // 鸿蒙：网页是 ArkUI 节点、底部条也由原生画，这两个值要带过去
+            schoolName = school.name,
+            scheduleNames = scheduleNames,
+            currentScheduleName = currentScheduleName,
         ),
         webHostEvents,
     )
@@ -488,7 +488,7 @@ fun WebViewScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                    .padding(horizontal = 16.dp + tabletHorizontalPadding)
+                    .padding(horizontal = tabletHorizontalPadding)
                     // 与首页底栏同一套底部间距算法
                     .padding(bottom = bottomFloatingPadding())
                     .fillMaxWidth()
@@ -646,7 +646,7 @@ private fun WebAlertDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 20.dp + tabletHorizontalPadding)
+                .padding(horizontal = tabletHorizontalPadding)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
@@ -702,7 +702,7 @@ private fun WebPromptDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 20.dp + tabletHorizontalPadding)
+                .padding(horizontal = tabletHorizontalPadding)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
@@ -777,7 +777,7 @@ private fun WebSelectionDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 20.dp + tabletHorizontalPadding)
+                .padding(horizontal = tabletHorizontalPadding)
                 .heightIn(max = 400.dp)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
@@ -862,7 +862,7 @@ private fun CourseTablePickerDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 20.dp + tabletHorizontalPadding)
+                .padding(horizontal = tabletHorizontalPadding)
                 .heightIn(max = 400.dp)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {

@@ -98,6 +98,24 @@ object AboutStr {
     /** 更新检查异常时的日志文案。 */
     val checkUpdateFailed = L("检查更新失败", "Failed to check for updates")
     val upToDate = L("当前已是最新版本", "Up to date")
+    /** 更新页版本卡正面：状态行（没有新版本时） */
+    val heroNoUpdate = L("暂无更新", "No updates")
+
+    /** 更新页版本卡正面：状态行（正在检查时） */
+    val heroChecking = L("检查中…", "Checking…")
+
+    /** 更新页版本卡背面：新版本没有写更新说明时的占位 */
+    val updateHasNoNotes = L("这个版本没有附更新说明", "This release has no notes")
+
+    /** 更新页版本卡背面：跳转完整更新日志。 */
+    val viewFullChangelog = L("查看全部更新日志", "View Full Changelog")
+
+    /** 更新页版本卡背面：本次更新的条目数。 */
+    val changelogItemCount = L("共 %d 项", "%d items")
+
+    /** 更新页版本卡背面：条目超出卡片可容纳数量。 */
+    val changelogMoreItems = L("还有 %d 项…", "and %d more…")
+
     val moreSettings = L("更多设置", "More Settings")
     val stableChannel = L("稳定版", "Stable")
     val updateChannel = L("更新通道", "Update Channel")
@@ -157,8 +175,21 @@ object AboutStr {
     val totalSponsorship = L("累计赞助", "Total Donations")
     val anonymous = L("匿名", "Anonymous")
     val donateQr = L("赞赏码", "Donation QR Code")
-    val donationDetails = L("捐赠明细", "Donation Details")
-    val donationManual = L("正在手工填写中", "Manually curated")
+    val donateHeroTitle = L("名字留在这一页", "Your name belongs on this page")
+    val donateHeroSubtitle = L(
+        "课表一直免费，服务器和域名不是。你的每一份支持，都会变成下一次更新。",
+        "The schedule is free; servers and domains aren't. Every bit of support becomes the next update."
+    )
+    val donateScanAction = L("微信扫码 · 金额随意", "Scan with WeChat · Any amount")
+    val donateScanHint = L(
+        "备注里留句话，名字会出现在下面的支持名单里",
+        "Leave a note and your name will show up in the list below"
+    )
+    val recentSupport = L("最近支持", "Recent Support")
+    val supportUpdated = L("持续更新", "Updated regularly")
+    val supportOpenSlot = L("虚位以待", "Open spot")
+    val donationEmpty = L("还没有公开的捐赠记录", "No public donations yet")
+    val donationLoadFailed = L("名单暂时没拉下来", "Couldn't load the list")
 
     // ---- 小组件使用引导 ----
 
